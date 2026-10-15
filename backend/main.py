@@ -12,7 +12,7 @@ import models
 import schemas
 import simulation_engine
 from session_manager import start_session, end_session, get_active_sessions
-from nutrition_engine import FOOD_DATABASE, calculate_nutrition_score, get_daily_summary, suggest_foods
+from nutrition_engine import FOOD_DATABASE, calculate_nutrition_score, get_daily_summary, suggest_foods, search_food_database
 
 try:
     from ml.model import generate_plan
@@ -314,6 +314,11 @@ def api_session_history(member_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @app.post("/api/members", response_model=schemas.MemberResponse)
 def create_member(member: schemas.MemberCreate, db: Session = Depends(get_db)):
+    existing = db.query(models.Member).filter(
+        (models.Member.email == member.email) | (models.Member.rfid_uid == member.rfid_uid)
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Member with this email or RFID already exists")
     db_member = models.Member(**member.model_dump())
     db.add(db_member)
     db.commit()
@@ -403,12 +408,29 @@ def get_plan_history(member_id: uuid.UUID, db: Session = Depends(get_db)):
 # --- Nutrition ---
 
 @app.post("/api/nutrition/log", response_model=schemas.NutritionLogResponse)
-def log_nutrition(log: schemas.NutritionLogCreate, member_id: uuid.UUID, db: Session = Depends(get_db)):
-    db_log = models.NutritionLog(**log.model_dump(), member_id=member_id)
+def log_nutrition(
+    log: schemas.NutritionLogCreate,
+    member_id: Optional[uuid.UUID] = None,
+    db: Session = Depends(get_db)
+):
+    target_member_id = log.member_id or member_id
+    if not target_member_id:
+        raise HTTPException(status_code=400, detail="member_id is required either in request body or query parameter")
+    data = log.model_dump(exclude={"member_id"})
+    db_log = models.NutritionLog(**data, member_id=target_member_id)
     db.add(db_log)
     db.commit()
     db.refresh(db_log)
     return db_log
+
+@app.delete("/api/nutrition/log/{log_id}")
+def delete_nutrition_log(log_id: uuid.UUID, db: Session = Depends(get_db)):
+    db_log = db.query(models.NutritionLog).filter(models.NutritionLog.id == log_id).first()
+    if not db_log:
+        raise HTTPException(status_code=404, detail="Log entry not found")
+    db.delete(db_log)
+    db.commit()
+    return {"message": "Deleted successfully", "id": str(log_id)}
 
 @app.get("/api/nutrition/{member_id}/today", response_model=schemas.DailyNutritionSummary)
 def get_nutrition_today(member_id: uuid.UUID, db: Session = Depends(get_db)):
@@ -425,8 +447,14 @@ def get_nutrition_history(member_id: uuid.UUID, db: Session = Depends(get_db)):
     return history
 
 @app.get("/api/nutrition/foods")
-def search_foods():
+def search_foods(q: Optional[str] = None, format: Optional[str] = None):
+    if q is not None or format == "list":
+        return search_food_database(q)
     return FOOD_DATABASE
+
+@app.get("/api/nutrition/foods/search")
+def search_foods_endpoint(q: Optional[str] = None):
+    return search_food_database(q)
 
 @app.get("/api/nutrition/{member_id}/score")
 def get_nutrition_score(member_id: uuid.UUID, db: Session = Depends(get_db)):

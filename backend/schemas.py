@@ -47,6 +47,25 @@ class MemberCreate(BaseModel):
     fitness_level_score: int
     rfid_uid: Optional[str] = None
     gym_id: Optional[UUID] = None
+    target_weight_kg: Optional[float] = None
+    stride_length_cm: Optional[float] = None
+    gender: Optional[str] = "not_specified"
+    fitness_goal: Optional[str] = "General Fitness"
+    daily_step_target: Optional[int] = 10000
+
+class MemberUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    age: Optional[int] = None
+    weight_kg: Optional[float] = None
+    height_cm: Optional[float] = None
+    target_weight_kg: Optional[float] = None
+    stride_length_cm: Optional[float] = None
+    gender: Optional[str] = None
+    fitness_goal: Optional[str] = None
+    fitness_level_score: Optional[int] = None
+    daily_step_target: Optional[int] = None
+    rfid_uid: Optional[str] = None
 
 class MemberResponse(BaseModel):
     id: UUID
@@ -55,10 +74,19 @@ class MemberResponse(BaseModel):
     age: Optional[int] = None
     weight_kg: Optional[float] = None
     height_cm: Optional[float] = None
+    target_weight_kg: Optional[float] = None
+    stride_length_cm: Optional[float] = None
+    gender: Optional[str] = "not_specified"
+    fitness_goal: Optional[str] = "General Fitness"
     fitness_level_score: Optional[int] = None
+    daily_step_target: Optional[int] = 10000
     rfid_uid: Optional[str] = None
     gym_id: Optional[UUID] = None
     created_at: datetime
+    total_sessions: Optional[int] = 0
+    total_calories_burned: Optional[float] = 0.0
+    avg_session_duration: Optional[float] = 0.0
+    lifetime_distance_km: Optional[float] = 0.0
     model_config = ConfigDict(from_attributes=True)
 
 class SessionResponse(BaseModel):
@@ -111,13 +139,15 @@ class PlanResponse(BaseModel):
 
 
 class NutritionLogCreate(BaseModel):
+    member_id: Optional[UUID] = None
     food_name: str
     serving_size: str
     calories: float
     protein_g: float
     carbs_g: float
     fats_g: float
-    fiber_g: Optional[float] = 0
+    fiber_g: Optional[float] = 0.0
+    meal_type: Optional[str] = "Breakfast"
 
 class NutritionLogResponse(BaseModel):
     id: UUID
@@ -128,7 +158,8 @@ class NutritionLogResponse(BaseModel):
     protein_g: float
     carbs_g: float
     fats_g: float
-    fiber_g: float
+    fiber_g: Optional[float] = 0.0
+    meal_type: Optional[str] = "Breakfast"
     logged_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -137,7 +168,18 @@ class DailyNutritionSummary(BaseModel):
     total_protein_g: float
     total_carbs_g: float
     total_fats_g: float
+    total_protein: Optional[float] = None
+    total_carbs: Optional[float] = None
+    total_fats: Optional[float] = None
+    total_fiber_g: Optional[float] = 0.0
+    target_calories: Optional[float] = 2000.0
+    target_protein: Optional[float] = 120.0
+    target_carbs: Optional[float] = 220.0
+    target_fats: Optional[float] = 60.0
+    target_fiber: Optional[float] = 30.0
+    remaining_calories: Optional[float] = 0.0
     date: str
+    items: Optional[list[NutritionLogResponse]] = []
 
 class MachineResponse(BaseModel):
     id: UUID

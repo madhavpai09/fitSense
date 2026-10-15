@@ -21,7 +21,7 @@ BACKEND_PID=$!
 sleep 2
 
 # 3. Start Member Application
-echo "[3/4] Starting Member App on http://localhost:5173..."
+echo "[3/4] Starting Member App on http://localhost:3000..."
 cd /Users/jmadhavpai/Desktop/fitSense/frontend/member-app
 npm run dev > member_app.log 2>&1 &
 MEMBER_PID=$!
@@ -35,7 +35,7 @@ MANAGER_PID=$!
 echo ""
 echo "✅ All FitSense services have been launched!"
 echo "   • FastAPI Docs:        http://localhost:8000/docs"
-echo "   • Member Application:  http://localhost:5173"
+echo "   • Member Application:  http://localhost:3000"
 echo "   • Manager Dashboard:   http://localhost:5174"
 echo ""
 echo "To test simulated treadmill sensor data in another terminal:"

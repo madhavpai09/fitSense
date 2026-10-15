@@ -38,6 +38,11 @@ class Member(Base):
     fitness_level_score = Column(Integer)
     rfid_uid = Column(String, unique=True, index=True, nullable=True)
     gym_id = Column(UUID(as_uuid=True), ForeignKey("gyms.id"), nullable=True, index=True) # Optional global roaming
+    stride_length_cm = Column(Float, nullable=True, default=70.0)
+    target_weight_kg = Column(Float, nullable=True, default=65.0)
+    gender = Column(String, nullable=True, default="not_specified")
+    fitness_goal = Column(String, nullable=True, default="General Fitness")
+    daily_step_target = Column(Integer, nullable=True, default=10000)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     gym = relationship("Gym", back_populates="members")
@@ -128,6 +133,8 @@ class NutritionLog(Base):
     carbs_g = Column(Float)
     fats_g = Column(Float)
     fiber_g = Column(Float, default=0)
+    meal_type = Column(String, default="Breakfast", nullable=True)
     logged_at = Column(DateTime, default=datetime.utcnow)
 
     member = relationship("Member", back_populates="nutrition_logs")
+
