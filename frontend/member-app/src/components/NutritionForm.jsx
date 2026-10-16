@@ -2,10 +2,49 @@ import React, { useState, useEffect } from 'react';
 import { fetchApi, getMemberData } from '../api';
 
 const MEAL_OPTIONS = [
-  { id: 'Breakfast', label: 'Breakfast', icon: '🌅' },
-  { id: 'Lunch', label: 'Lunch', icon: '☀️' },
-  { id: 'Snacks', label: 'Snacks', icon: '☕' },
-  { id: 'Dinner', label: 'Dinner', icon: '🌙' },
+  {
+    id: 'Breakfast',
+    label: 'Breakfast',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2v4M4.93 4.93l2.83 2.83M2 12h4M20 12h2M19.07 4.93l-2.83 2.83"/>
+        <path d="M2 18h20"/>
+        <path d="M4 18a8 8 0 0 1 16 0"/>
+      </svg>
+    )
+  },
+  {
+    id: 'Lunch',
+    label: 'Lunch',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+      </svg>
+    )
+  },
+  {
+    id: 'Snacks',
+    label: 'Snacks',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 8h1a4 4 0 1 1 0 8h-1"/>
+        <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/>
+        <line x1="6" x2="6" y1="2" y2="4"/>
+        <line x1="10" x2="10" y1="2" y2="4"/>
+        <line x1="14" x2="14" y1="2" y2="4"/>
+      </svg>
+    )
+  },
+  {
+    id: 'Dinner',
+    label: 'Dinner',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+      </svg>
+    )
+  },
 ];
 
 const getDefaultMeal = () => {

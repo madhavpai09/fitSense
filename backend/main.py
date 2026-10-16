@@ -325,16 +325,70 @@ def create_member(member: schemas.MemberCreate, db: Session = Depends(get_db)):
     db.refresh(db_member)
     return db_member
 
+def populate_member_stats(member: models.Member, db: Session) -> dict:
+    summaries = db.query(models.SessionSummary).filter(models.SessionSummary.member_id == member.id).all()
+    total_sessions = len(summaries)
+    total_calories = round(sum(s.calories_burned or 0.0 for s in summaries), 1)
+    avg_duration = round(sum(s.total_duration_min or 0.0 for s in summaries) / total_sessions, 1) if total_sessions > 0 else 0.0
+    lifetime_dist = round(sum((s.avg_speed or 0.0) * ((s.total_duration_min or 0.0) / 60.0) for s in summaries), 2)
+    
+    stride = member.stride_length_cm
+    if not stride and member.height_cm:
+        ratio = 0.413 if (member.gender or "").lower() == "female" else 0.415
+        stride = round(member.height_cm * ratio, 1)
+    elif not stride:
+        stride = 70.0
+
+    target_wt = member.target_weight_kg if member.target_weight_kg else (round(member.weight_kg - 5, 1) if member.weight_kg else 65.0)
+
+    return {
+        "id": member.id,
+        "name": member.name,
+        "email": member.email,
+        "age": member.age,
+        "weight_kg": member.weight_kg,
+        "height_cm": member.height_cm,
+        "target_weight_kg": target_wt,
+        "stride_length_cm": stride,
+        "gender": member.gender or "not_specified",
+        "fitness_goal": member.fitness_goal or "General Fitness",
+        "fitness_level_score": member.fitness_level_score or 3,
+        "daily_step_target": member.daily_step_target or 10000,
+        "rfid_uid": member.rfid_uid,
+        "gym_id": member.gym_id,
+        "created_at": member.created_at,
+        "total_sessions": total_sessions,
+        "total_calories_burned": total_calories,
+        "avg_session_duration": avg_duration,
+        "lifetime_distance_km": lifetime_dist
+    }
+
 @app.get("/api/members/{member_id}", response_model=schemas.MemberResponse)
 def get_member(member_id: uuid.UUID, db: Session = Depends(get_db)):
     member = db.query(models.Member).filter(models.Member.id == member_id).first()
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
-    return member
+    return populate_member_stats(member, db)
+
+@app.put("/api/members/{member_id}", response_model=schemas.MemberResponse)
+def update_member(member_id: uuid.UUID, update_data: schemas.MemberUpdate, db: Session = Depends(get_db)):
+    member = db.query(models.Member).filter(models.Member.id == member_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    
+    update_dict = update_data.model_dump(exclude_unset=True)
+    for key, val in update_dict.items():
+        if val is not None and hasattr(member, key):
+            setattr(member, key, val)
+    
+    db.commit()
+    db.refresh(member)
+    return populate_member_stats(member, db)
 
 @app.get("/api/members", response_model=list[schemas.MemberResponse])
 def list_members(db: Session = Depends(get_db)):
-    return db.query(models.Member).all()
+    members = db.query(models.Member).all()
+    return [populate_member_stats(m, db) for m in members]
 
 class LoginRequest(schemas.BaseModel):
     rfid_uid: str
@@ -344,7 +398,7 @@ def login_member(req: LoginRequest, db: Session = Depends(get_db)):
     member = db.query(models.Member).filter(models.Member.rfid_uid == req.rfid_uid).first()
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
-    return member
+    return populate_member_stats(member, db)
 
 # --- Plans ---
 

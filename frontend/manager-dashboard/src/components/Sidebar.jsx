@@ -4,7 +4,7 @@ const Sidebar = ({ alertCount, activeCount }) => {
   return (
     <nav className="sidebar">
       <div className="sidebar-logo">
-        NEXUS<span className="sidebar-logo-dot"></span> Manager
+        fitSense<span className="sidebar-logo-dot"></span> Manager
       </div>
       
       <NavLink to="/equipment" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
