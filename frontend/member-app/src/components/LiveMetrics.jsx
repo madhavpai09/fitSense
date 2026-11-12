@@ -31,6 +31,7 @@ const LiveMetrics = ({ machineId }) => {
   }, [machineId]);
 
   const formatTime = (seconds) => {
+    if (!metrics.is_active || !seconds || seconds < 0 || seconds > 7200) return '00:00';
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
     const s = (seconds % 60).toString().padStart(2, '0');
     return `${m}:${s}`;

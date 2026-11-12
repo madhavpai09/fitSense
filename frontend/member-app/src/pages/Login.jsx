@@ -28,6 +28,22 @@ const Login = () => {
     }
   };
 
+  const handleResetDemo = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await fetchApi('/members/AABBCCDD/reset', {
+        method: 'POST',
+      });
+      localStorage.setItem('memberData', JSON.stringify(data));
+      navigate('/');
+    } catch (err) {
+      setError(err.message || 'Failed to reset demo user.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="login-page">
       <div className="card login-card flex flex-col gap-4">
@@ -58,6 +74,30 @@ const Login = () => {
           />
           <button type="submit" className="btn" disabled={loading} style={{ width: '100%' }}>
             {loading ? 'Authenticating...' : 'Login with RFID'}
+          </button>
+
+          <div className="flex items-center gap-2 my-1" style={{ opacity: 0.6 }}>
+            <div style={{ flex: 1, height: '1px', background: 'var(--mist-800)' }}></div>
+            <span className="text-xs font-mono">DEMO SHORTCUT</span>
+            <div style={{ flex: 1, height: '1px', background: 'var(--mist-800)' }}></div>
+          </div>
+
+          <button 
+            type="button" 
+            onClick={handleResetDemo}
+            disabled={loading}
+            className="btn-ghost font-mono text-xs" 
+            style={{ 
+              width: '100%', 
+              padding: '10px', 
+              borderRadius: '6px', 
+              border: '1px solid rgba(255,255,255,0.15)',
+              background: 'rgba(255,255,255,0.03)',
+              color: 'var(--signal)',
+              cursor: 'pointer'
+            }}
+          >
+            ⚡ Reset & Login as Demo User (AABBCCDD)
           </button>
         </form>
         

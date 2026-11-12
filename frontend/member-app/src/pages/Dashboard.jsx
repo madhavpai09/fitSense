@@ -8,6 +8,25 @@ const Dashboard = () => {
   const [planSummary, setPlanSummary] = useState(null);
   const [nutritionScore, setNutritionScore] = useState(null);
   const [activeMachineId, setActiveMachineId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefreshPlan = async () => {
+    if (!member?.id) return;
+    setRefreshing(true);
+    try {
+      const res = await fetchApi(`/plans/${member.id}/generate`, { method: 'POST' });
+      if (res && res.plan) {
+        setPlanSummary(res.plan);
+      } else {
+        const fresh = await fetchApi(`/plans/${member.id}`);
+        setPlanSummary(fresh);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,8 +75,23 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-2 gap-6">
         <div className="card flex flex-col gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between">
             <h2 className="text-xl font-display font-bold text-signal">Today's Recommended Plan</h2>
+            <button 
+              onClick={handleRefreshPlan} 
+              disabled={refreshing}
+              className="text-xs font-mono"
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                color: 'var(--signal)',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+            >
+              {refreshing ? 'Recalculating...' : '🔄 Recalculate'}
+            </button>
           </div>
           {planSummary ? (
             <div className="grid grid-cols-3 gap-4">

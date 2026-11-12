@@ -8,6 +8,25 @@ const WorkoutPlan = () => {
   const [plan, setPlan] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [recalculating, setRecalculating] = useState(false);
+
+  const handleRecalculate = async () => {
+    if (!member?.id) return;
+    setRecalculating(true);
+    try {
+      await fetchApi(`/plans/${member.id}/generate`, { method: 'POST' });
+      const [planData, historyData] = await Promise.all([
+        fetchApi(`/plans/${member.id}`),
+        fetchApi(`/plans/${member.id}/history`)
+      ]);
+      setPlan(planData);
+      setHistory(historyData);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   useEffect(() => {
     const fetchPlanData = async () => {
@@ -35,9 +54,19 @@ const WorkoutPlan = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="page-title">Personalised Workout Plan</h1>
-        <p className="page-subtitle">ML-powered recommendations tailored to your progress</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="page-title">Personalised Workout Plan</h1>
+          <p className="page-subtitle">ML-powered recommendations tailored to your progress</p>
+        </div>
+        <button 
+          onClick={handleRecalculate} 
+          disabled={recalculating}
+          className="btn text-sm"
+          style={{ width: 'auto', padding: '8px 16px' }}
+        >
+          {recalculating ? 'Optimising Plan...' : '⚡ Generate New Plan'}
+        </button>
       </div>
       
       {plan?.injury_risk_flag && (

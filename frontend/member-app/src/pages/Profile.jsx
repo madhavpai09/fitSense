@@ -129,6 +129,36 @@ const Profile = () => {
   }, [member.id]);
 
   // Auto-calculate stride length from height and gender
+  const [resetting, setResetting] = useState(false);
+
+  const handleResetDb = async () => {
+    const rfid = profile?.rfid_uid || 'AABBCCDD';
+    if (!window.confirm(`Are you sure you want to completely reset database history for ${rfid}? This will purge old sessions, plans, and diet logs back to clean defaults.`)) {
+      return;
+    }
+    setResetting(true);
+    try {
+      const updated = await fetchApi(`/members/${rfid}/reset`, { method: 'POST' });
+      localStorage.setItem('memberData', JSON.stringify(updated));
+      setProfile(updated);
+      setName(updated.name || 'Alice Smith');
+      setEmail(updated.email || 'alice@fitsense.local');
+      setAge(updated.age || 28);
+      setWeightKg(updated.weight_kg || 65);
+      setHeightCm(updated.height_cm || 170);
+      setTargetWeightKg(updated.target_weight_kg || 60);
+      setStrideLengthCm(updated.stride_length_cm || 70);
+      setFitnessGoal(updated.fitness_goal || 'Fat Loss & Endurance');
+      setFitnessLevel(updated.fitness_level_score || 3);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      setError(err.message || 'Failed to reset user database.');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const handleAutoEstimateStride = () => {
     const height = parseFloat(heightCm) || 175;
     const ratio = gender === 'female' ? 0.413 : 0.415;
@@ -613,11 +643,28 @@ const Profile = () => {
         </div>
 
         {/* Action Button */}
-        <div className="flex items-center justify-end gap-4 mt-2">
+        <div className="flex items-center justify-between gap-4 mt-2">
+          <button
+            type="button"
+            onClick={handleResetDb}
+            disabled={saving || resetting}
+            className="btn-ghost font-mono text-xs"
+            style={{
+              padding: '0.85rem 1.5rem',
+              borderRadius: '8px',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: 'rgba(239, 68, 68, 0.08)',
+              color: 'var(--danger)',
+              cursor: 'pointer'
+            }}
+          >
+            {resetting ? 'Resetting DB...' : `🗑️ Reset Database for ${profile?.rfid_uid || 'AABBCCDD'}`}
+          </button>
+
           <button
             type="submit"
             className="btn"
-            disabled={saving}
+            disabled={saving || resetting}
             style={{
               padding: '0.85rem 2.5rem',
               fontSize: '0.92rem',

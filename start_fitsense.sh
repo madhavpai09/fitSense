@@ -16,7 +16,7 @@ brew services start postgresql@14 >/dev/null 2>&1
 # 2. Start FastAPI Backend
 echo "[2/4] Starting FastAPI Backend on http://localhost:8000..."
 cd /Users/jmadhavpai/Desktop/fitSense/backend
-./venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
+./venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload > backend.log 2>&1 &
 BACKEND_PID=$!
 sleep 2
 

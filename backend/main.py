@@ -11,7 +11,7 @@ from database import engine, Base, get_db
 import models
 import schemas
 import simulation_engine
-from session_manager import start_session, end_session, get_active_sessions
+from session_manager import start_session, end_session, get_active_sessions, check_session_timeout
 from nutrition_engine import FOOD_DATABASE, calculate_nutrition_score, get_daily_summary, suggest_foods, search_food_database
 
 try:
@@ -196,6 +196,7 @@ def ingest_sensor_data(data: schemas.SensorIngest, db: Session = Depends(get_db)
 
 @app.get("/api/live-metrics/{machine_id}")
 def get_live_metrics(machine_id: str, db: Session = Depends(get_db)):
+    check_session_timeout(db)
     machine = None
     try:
         m_uuid = uuid.UUID(machine_id)
@@ -208,12 +209,6 @@ def get_live_metrics(machine_id: str, db: Session = Depends(get_db)):
 
     target_machine_id = machine.id if machine else None
     
-    reading = None
-    if target_machine_id:
-        reading = db.query(models.SessionReading).filter(
-            models.SessionReading.machine_id == target_machine_id
-        ).order_by(models.SessionReading.timestamp.desc()).first()
-
     active_session = None
     if target_machine_id:
         active_session = db.query(models.Session).filter(
@@ -221,11 +216,24 @@ def get_live_metrics(machine_id: str, db: Session = Depends(get_db)):
             models.Session.is_active == True
         ).first()
 
-    elapsed = 0
-    if active_session and active_session.started_at:
-        elapsed = int((datetime.utcnow() - active_session.started_at).total_seconds())
+    reading = None
+    if target_machine_id:
+        reading = db.query(models.SessionReading).filter(
+            models.SessionReading.machine_id == target_machine_id
+        ).order_by(models.SessionReading.timestamp.desc()).first()
 
-    if not reading:
+    # Session is only considered live if it has received telemetry recently (within 45s)
+    is_live = False
+    if active_session and reading:
+        time_since_reading = (datetime.utcnow() - reading.timestamp).total_seconds()
+        if time_since_reading <= 45:
+            is_live = True
+
+    elapsed = 0
+    if is_live and active_session and active_session.started_at:
+        elapsed = max(0, int((datetime.utcnow() - active_session.started_at).total_seconds()))
+
+    if not is_live or not reading:
         return {
             "machine_id": str(target_machine_id) if target_machine_id else machine_id,
             "speed_kmh": 0.0,
@@ -236,8 +244,8 @@ def get_live_metrics(machine_id: str, db: Session = Depends(get_db)):
             "motor_current": 0.0,
             "vibration_idx": 0.0,
             "vibration_status": "normal",
-            "elapsed_time": elapsed,
-            "is_active": active_session is not None,
+            "elapsed_time": 0,
+            "is_active": False,
             "timestamp": datetime.utcnow()
         }
 
@@ -245,16 +253,16 @@ def get_live_metrics(machine_id: str, db: Session = Depends(get_db)):
     
     return {
         "machine_id": str(target_machine_id),
-        "speed_kmh": reading.speed_kmh,
-        "speed": reading.speed_kmh,
-        "incline_pct": reading.incline_pct,
-        "incline": reading.incline_pct,
-        "current_a": reading.current_a,
-        "motor_current": reading.current_a,
-        "vibration_idx": reading.vibration_idx,
+        "speed_kmh": round(reading.speed_kmh, 1),
+        "speed": round(reading.speed_kmh, 1),
+        "incline_pct": round(reading.incline_pct, 1),
+        "incline": round(reading.incline_pct, 1),
+        "current_a": round(reading.current_a, 2),
+        "motor_current": round(reading.current_a, 2),
+        "vibration_idx": round(reading.vibration_idx, 3),
         "vibration_status": vib_status,
         "elapsed_time": elapsed,
-        "is_active": active_session is not None,
+        "is_active": True,
         "timestamp": reading.timestamp
     }
 
@@ -281,10 +289,10 @@ def api_end_session(session_id: uuid.UUID, db: Session = Depends(get_db)):
     member = db.query(models.Member).filter(models.Member.id == session.member_id).first()
     recent_summaries = db.query(models.SessionSummary).filter(
         models.SessionSummary.member_id == session.member_id
-    ).order_by(models.SessionSummary.created_at.desc()).limit(5).all()
+    ).order_by(models.SessionSummary.created_at.desc()).limit(10).all()
     
-    # Note: ML model logic to be fully implemented later, call placeholder for now.
-    plan_data = generate_plan(member, recent_summaries)
+    nutr_score = calculate_nutrition_score(db, str(session.member_id))
+    plan_data = generate_plan(member, recent_summaries, nutrition_score=nutr_score)
     
     plan = models.MemberPlan(
         member_id=session.member_id,
@@ -400,6 +408,22 @@ def login_member(req: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Member not found")
     return populate_member_stats(member, db)
 
+@app.post("/api/members/{rfid_uid}/reset", response_model=schemas.MemberResponse)
+def api_reset_member(rfid_uid: str, db: Session = Depends(get_db)):
+    """Wipes all sessions, telemetry readings, plans and nutrition logs for this RFID member,
+    resetting them to clean baseline test defaults.
+    """
+    from reset_user import reset_user
+    member = reset_user(rfid_uid)
+    return populate_member_stats(member, db)
+
+@app.post("/api/members/reset-demo", response_model=schemas.MemberResponse)
+def api_reset_demo_member(db: Session = Depends(get_db)):
+    """Quick reset endpoint specifically for AABBCCDD demo user."""
+    from reset_user import reset_user
+    member = reset_user("AABBCCDD")
+    return populate_member_stats(member, db)
+
 # --- Plans ---
 
 @app.get("/api/plans/{member_id}")
@@ -422,18 +446,54 @@ def get_latest_plan(member_id: uuid.UUID, db: Session = Depends(get_db)):
             "injury_risk_details": "Initial plan generated",
             "created_at": datetime.utcnow()
         }
+    speed = round(float(plan.recommended_speed_kmh or 5.0), 1)
+    incline = round(float(plan.recommended_incline_deg or 1.0) * 2) / 2.0
+    duration = max(15, round(float(plan.recommended_duration_min or 20.0)))
     return {
         "id": str(plan.id),
         "member_id": str(plan.member_id),
-        "recommended_speed": plan.recommended_speed_kmh,
-        "recommended_speed_kmh": plan.recommended_speed_kmh,
-        "recommended_incline": plan.recommended_incline_deg,
-        "recommended_incline_deg": plan.recommended_incline_deg,
-        "recommended_duration": plan.recommended_duration_min,
-        "recommended_duration_min": plan.recommended_duration_min,
+        "recommended_speed": speed,
+        "recommended_speed_kmh": speed,
+        "recommended_incline": incline,
+        "recommended_incline_deg": incline,
+        "recommended_duration": duration,
+        "recommended_duration_min": duration,
         "injury_risk_flag": plan.injury_risk_flag,
         "injury_risk_details": plan.injury_risk_details,
         "created_at": plan.created_at
+    }
+
+@app.post("/api/plans/{member_id}/generate")
+def trigger_generate_plan(member_id: uuid.UUID, db: Session = Depends(get_db)):
+    member = db.query(models.Member).filter(models.Member.id == member_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    recent_summaries = db.query(models.SessionSummary).filter(
+        models.SessionSummary.member_id == member_id
+    ).order_by(models.SessionSummary.created_at.desc()).limit(10).all()
+    nutr_score = calculate_nutrition_score(db, str(member_id))
+    plan_data = generate_plan(member, recent_summaries, nutrition_score=nutr_score)
+    plan = models.MemberPlan(
+        member_id=member_id,
+        recommended_speed_kmh=plan_data.get("recommended_speed_kmh", 0),
+        recommended_incline_deg=plan_data.get("recommended_incline_deg", 0),
+        recommended_duration_min=plan_data.get("recommended_duration_min", 0),
+        injury_risk_flag=plan_data.get("injury_risk_flag", False),
+        injury_risk_details=plan_data.get("injury_risk_details", "")
+    )
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return {
+        "status": "success",
+        "plan": {
+            "recommended_speed": plan.recommended_speed_kmh,
+            "recommended_incline": plan.recommended_incline_deg,
+            "recommended_duration": plan.recommended_duration_min,
+            "injury_risk_flag": plan.injury_risk_flag,
+            "injury_risk_details": plan.injury_risk_details,
+            "created_at": plan.created_at
+        }
     }
 
 @app.get("/api/plans/{member_id}/history")
@@ -446,12 +506,12 @@ def get_plan_history(member_id: uuid.UUID, db: Session = Depends(get_db)):
             "id": str(p.id),
             "member_id": str(p.member_id),
             "date": p.created_at.strftime("%b %d"),
-            "recommended_speed": p.recommended_speed_kmh,
-            "recommended_speed_kmh": p.recommended_speed_kmh,
-            "recommended_incline": p.recommended_incline_deg,
-            "recommended_incline_deg": p.recommended_incline_deg,
-            "recommended_duration": p.recommended_duration_min,
-            "recommended_duration_min": p.recommended_duration_min,
+            "recommended_speed": round(float(p.recommended_speed_kmh or 5.0), 1),
+            "recommended_speed_kmh": round(float(p.recommended_speed_kmh or 5.0), 1),
+            "recommended_incline": round(float(p.recommended_incline_deg or 1.0) * 2) / 2.0,
+            "recommended_incline_deg": round(float(p.recommended_incline_deg or 1.0) * 2) / 2.0,
+            "recommended_duration": max(15, round(float(p.recommended_duration_min or 20.0))),
+            "recommended_duration_min": max(15, round(float(p.recommended_duration_min or 20.0))),
             "injury_risk_flag": p.injury_risk_flag,
             "injury_risk_details": p.injury_risk_details,
             "created_at": p.created_at
